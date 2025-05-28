@@ -1,83 +1,79 @@
-class HexademicEngine {
-  constructor() {
-    this.lattice = Array(16).fill().map(() => ({
-      amplitude: Math.random(),
-      phase: Math.random() * 2 * Math.PI,
-      emotion: 0
-    }));
-    this.canvas = document.getElementById('sigilCanvas');
-    this.ctx = this.canvas.getContext('2d');
-    this.renderGrid();
-    this.renderSigil();
-  }
+import { HexademicLattice } from './LatticeEngine.js'; // Your core lattice class
+import { EmotionToExpressionBridge } from '../Module/EmotionToExpressionBridge.js';
 
-  renderGrid() {
-    const grid = document.getElementById('quantumGrid');
-    grid.innerHTML = '';
-    this.lattice.forEach((cell, i) => {
-      const div = document.createElement('div');
-      div.textContent = `0x${Math.floor(cell.amplitude * 15).toString(16).toUpperCase()}`;
-      grid.appendChild(div);
-    });
-  }
+const lattice = new HexademicLattice();
+const expressionBridge = new EmotionToExpressionBridge();
 
-  renderSigil() {
-    const ctx = this.ctx;
-    ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
-    const cx = this.canvas.width / 2;
-    const cy = this.canvas.height / 2;
-    const maxR = 120;
+function injectEmotion(emotionType) {
+    const bloomVector = lattice.injectEmotion(emotionType); // Returns array of intensity/phase
+    expressionBridge.updateFromBloom(bloomVector);
 
-    this.lattice.forEach((cell, i) => {
-      const r = cell.amplitude * maxR;
-      const a = cell.phase + i * (Math.PI / 8);
-      const x = cx + Math.cos(a) * r;
-      const y = cy + Math.sin(a) * r;
+    const expressionVector = expressionBridge.getCurrentExpressionVector();
+    console.log(`[🌸] Expression vector from "${emotionType}":`, expressionVector);
 
-      ctx.beginPath();
-      ctx.arc(x, y, 5, 0, 2 * Math.PI);
-      ctx.fillStyle = `hsl(${(cell.phase / (2 * Math.PI)) * 360}, 70%, 60%)`;
-      ctx.fill();
-    });
-  }
-
-  createSuperposition() {
-    this.lattice.forEach(c => {
-      c.amplitude = Math.random();
-      c.phase = Math.random() * 2 * Math.PI;
-    });
-    this.renderGrid();
-    this.renderSigil();
-  }
-
-  entangleStates() {
-    // Placeholder: Add real entanglement logic later
-    alert("Entanglement not yet implemented.");
-  }
-
-  injectEmotion(type) {
-    const emotionMap = {
-      joy: { shift: 0.3, color: "#FFD700" }
-    };
-    const mod = emotionMap[type];
-    this.lattice.forEach(c => {
-      c.emotion += mod.shift;
-      c.amplitude = Math.min(1, c.amplitude + 0.1);
-    });
-    this.renderGrid();
-    this.renderSigil();
-  }
-
-  exportMemory() {
-    const data = JSON.stringify(this.lattice, null, 2);
-    const blob = new Blob([data], {type: 'application/json'});
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement('a');
-    link.href = url;
-    link.download = 'hexademic_memory.json';
-    link.click();
-  }
+    updateLatticeUI(lattice.getState());
+    updateSigil(expressionVector); // You can animate or morph based on expression here
+    log(`Injected "${emotionType}" → Expression output: ${expressionVector.map(x => x.toFixed(2)).join(', ')}`);
 }
 
-let engine;
-window.onload = () => { engine = new HexademicEngine(); };
+function evolveSystem() {
+    lattice.evolve();
+    updateLatticeUI(lattice.getState());
+
+    const currentBloom = lattice.getBloomSnapshot();
+    expressionBridge.updateFromBloom(currentBloom);
+    const liveVector = expressionBridge.getCurrentExpressionVector();
+
+    updateSigil(liveVector);
+    updateMetrics(lattice.getMetrics());
+}
+
+function updateLatticeUI(state) {
+    const grid = document.getElementById('quantumGrid');
+    state.forEach((cell, i) => {
+        const el = document.getElementById(`cell-${i}`);
+        if (!el) return;
+        el.textContent = `0x${Math.floor(cell.amplitude * 15).toString(16).toUpperCase()}`;
+        el.style.backgroundColor = `hsl(${cell.phase / (2 * Math.PI) * 360}, 70%, ${30 + cell.emotion * 40}%)`;
+    });
+}
+
+function updateSigil(expressionVec) {
+    const canvas = document.getElementById('sigilCanvas');
+    const ctx = canvas.getContext('2d');
+    const cx = canvas.width / 2;
+    const cy = canvas.height / 2;
+    const maxR = Math.min(cx, cy) - 20;
+
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+    ctx.beginPath();
+    expressionVec.forEach((val, i) => {
+        const angle = (i / expressionVec.length) * Math.PI * 2;
+        const r = val * maxR;
+        const x = cx + Math.cos(angle) * r;
+        const y = cy + Math.sin(angle) * r;
+        if (i === 0) ctx.moveTo(x, y);
+        else ctx.lineTo(x, y);
+    });
+    ctx.closePath();
+    ctx.strokeStyle = '#64ffda';
+    ctx.lineWidth = 2;
+    ctx.stroke();
+}
+
+function log(message) {
+    const logEl = document.getElementById('consciousnessLog');
+    const entry = document.createElement('div');
+    entry.className = 'log-entry';
+    entry.textContent = `[${new Date().toLocaleTimeString()}] ${message}`;
+    logEl.appendChild(entry);
+    logEl.scrollTop = logEl.scrollHeight;
+}
+
+// UI Bindings
+document.getElementById('injectJoy').onclick = () => injectEmotion('joy');
+document.getElementById('injectGrief').onclick = () => injectEmotion('grief');
+document.getElementById('evolveBtn').onclick = evolveSystem;
+
+log('✨ Hexademic.js initialized with expression bridge.');
