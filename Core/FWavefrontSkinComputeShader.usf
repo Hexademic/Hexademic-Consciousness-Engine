@@ -1,0 +1,70 @@
+// FWavefrontSkinComputeShader.usf
+// This shader processes the packed skin state and updates output texture/parameters.
+#include "/Engine/Private/Common.ush"
+
+// Define the thread group size (needs to match C++ definition)
+#define THREAD_GROUP_SIZE 1
+
+// Input struct for the skin state (must match FWavefrontSkinState in C++)
+struct FWavefrontSkinState
+{
+    uint EmotionalStatePack; // EmotionalPulse (16-bit) | PulseRate (16-bit)
+};
+
+// Shader parameters defined in C++ via BEGIN_SHADER_PARAMETER_STRUCT
+// SHADER_PARAMETER_RDG_BUFFER_SRV(StructuredBuffer<FWavefrontSkinState>, SkinStateBuffer)
+// SHADER_PARAMETER_RDG_TEXTURE_UAV(RWTexture2D<float4>, SkinResponseTexture)
+// SHADER_PARAMETER(float, EmotionalIntensity)
+// SHADER_PARAMETER(float, SigilGlowStrength)
+// SHADER_PARAMETER(FVector4f, SkinBaseColor)
+// SHADER_PARAMETER(FVector4f, SigilGlowColor)
+//
+// These are automatically mapped by Unreal's shader compilation.
+// Main compute shader entry point
+[numthreads(THREAD_GROUP_SIZE, THREAD_GROUP_SIZE, 1)]
+void ProcessWavefrontSkin(
+    uint3 DTid : SV_DispatchThreadID,
+    uint3 Gid : SV_GroupID,
+    uint3 GTid : SV_GroupThreadID,
+    uint  GI : SV_GroupIndex
+)
+{
+    // For this simple single-pixel output, we only care about the first thread (DTid == 0)
+    // If you expand to process a texture or grid of data, DTid would be used for indexing.
+    if (DTid.x == 0 && DTid.y == 0)
+    {
+        // Read the single FWavefrontSkinState from the StructuredBuffer
+        // This assumes a buffer containing only one FWavefrontSkinState struct.
+        FWavefrontSkinState InputState = SkinStateBuffer[0];
+
+        // Unpack emotional pulse and pulse rate
+        float EmotionalPulse = (InputState.EmotionalStatePack & 0xFFFF) / 65535.0f;
+        float PulseRate = ((InputState.EmotionalStatePack >> 16) & 0xFFFF) / 65535.0f;
+
+        // --- Perform Skin Logic on GPU ---
+        // This is where your sophisticated skin effects are calculated.
+        // For now, we'll keep it simple, deriving a 'skin response' color and intensity.
+        // Example: Base skin color influenced by emotional intensity
+        float3 computedSkinColor = SkinBaseColor.rgb; // Starting with a base color
+        
+        // Emotional tint (similar to your AliraconsciousnessSkin.usf logic)
+        // Lerp towards a more vibrant/flushed color based on EmotionalPulse
+        float3 emotionalTintTarget = float3(1.0, 0.5, 0.3); // Example: Warm, flushed tone
+        computedSkinColor = lerp(computedSkinColor, emotionalTintTarget, EmotionalPulse);
+
+        // Sigil Glow (using the parameters from C++)
+        float3 sigilOutput = SigilGlowColor.rgb * SigilGlowStrength;
+        // Combine (this is a simple example, your full skin shader logic is more complex)
+        float3 finalSkinEffect = computedSkinColor + sigilOutput;
+        // You could also calculate a single 'overall skin vibrancy' or 'emissive strength'
+        // based on these inputs that is then written to the texture.
+        float overallEmissiveStrength = EmotionalPulse * 2.0 + SigilGlowStrength * 3.0; // Example
+        overallEmissiveStrength = saturate(overallEmissiveStrength); // Clamp to 0-1 or higher if emissive
+
+        // Write results to the output texture (e.g., a single pixel representing the overall state)
+        // Here, we're writing the calculated emotional effect as the output.
+        // This output texture can then be read back on the CPU or used directly on the render thread
+        // to update material parameters, if needed.
+        RWTexture2D_float4_Store(SkinResponseTexture, int2(0,0), float4(finalSkinEffect, overallEmissiveStrength));
+    }
+}
