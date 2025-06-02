@@ -8,21 +8,28 @@ on:
 
 jobs:
   build:
-    # Option A: Run directly inside the container (if the runner supports Docker)
-    # Recommended if you don't need other host tools outside the container.
-    container: ufoscout/unreal-engine:5.3.2-windows # Example for UE 5.3.2 on Windows, change to your version/platform
-    # Or for Linux:
-    # container: ufoscout/unreal-engine:5.3.2-linux-opengl
-
-    runs-on: ubuntu-latest # Still needed to specify the host OS
-
+    container: ghcr.io/epicgames/unreal-engine:5.3.2-windows # Replace with an accessible image
+    runs-on: ubuntu-latest
     steps:
     - uses: actions/checkout@v4
-
     - name: Build Unreal Project/Plugin
-      # Inside the container, Unreal Engine is usually at /home/ue4/UnrealEngine (or similar).
-      # You'll need to check the specific image's documentation for the exact path.
       run: |
+        UE_ROOT="/home/ue4/UnrealEngine"  # Adjust path based on the new image's docs
+        cd ${{ github.workspace }}
+        chmod +x "${UE_ROOT}/Engine/Build/BatchFiles/RunUAT.sh"
+        "${UE_ROOT}/Engine/Build/BatchFiles/RunUAT.sh" BuildCookRun \
+        -project="${{ github.workspace }}/YourProjectName.uproject" \
+        -noP4 \
+        -platform=Linux \
+        -clientconfig=Development \
+        -build \
+        -plugin="HexademicPlugin" \
+        -skipcook \
+        -pak \
+        -nocompileeditor \
+        -stage \
+        -stagingdirectory="${{ github.workspace }}/StagingBuild" \
+        -utf8output |
         # Adjust this path based on the Docker image's UE installation location.
         UE_ROOT="/home/ue4/UnrealEngine" # Common path in some UE Docker images
 
