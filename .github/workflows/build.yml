@@ -1,0 +1,25 @@
+name: Build Hexademic
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  build:
+    name: Build Unreal Project
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Build Hexademic Project
+        run: |
+          "C:\Program Files\Epic Games\UE_5.3\Engine\Build\BatchFiles\Build.bat" ^
+          HexademicEditor Win64 Development ^
+          -Project="$(pwd)\Hexademic-Consciousness-Engine\Hexademic.uproject" ^
+          -WaitMutex -FromMsBuild
+        shell: cmd
