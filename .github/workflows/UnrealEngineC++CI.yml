@@ -1,32 +1,27 @@
-name: Unreal Engine 5.3.2 Build
+name: 'Repo Lockdown'
 
 on:
-  push:
-    branches: [main]
-  pull_request:
+  issues:
+    types: [opened]
+  pull_request_target:
+    types: [opened]
+  schedule:
+    - cron: '0 * * * *'  # Every hour
+
+permissions:
+  issues: write
+  pull-requests: write
 
 jobs:
-  build:
-    runs-on: windows-latest
-    env:
-      DOCKER_USER: ${{ secrets.GHCR_USER || github.actor }}
-      DOCKER_PASSWORD: ${{ secrets.GHCR_PAT || secrets.GITHUB_TOKEN }}
+  lockdown:
+    runs-on: ubuntu-latest
     steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
-
-      - name: Login to GitHub Container Registry
-        run: echo $env:DOCKER_PASSWORD | docker login ghcr.io -u $env:DOCKER_USER --password-stdin
-        shell: pwsh
-
-      - name: Pull Unreal Engine Docker Image
-        run: |
-          docker pull ghcr.io/epicgames/unreal-engine:5.3.2-windows
-        shell: pwsh
-
-      # Optional: Run your build inside the container
-      # - name: Build in Unreal Container
-      #   run: |
-      #     docker run --rm -v "${{ github.workspace }}:/workspace" ghcr.io/epicgames/unreal-engine:5.3.2-windows BuildCommandHere
-
-    # Add your additional build, test, or artifact steps here
+      - name: Lock issues and PRs
+        uses: dessant/repo-lockdown@v2
+        with:
+          issue-comment: >
+            🚫 Epic Games does not accept issues on this repository.
+            Please visit [Unreal Engine Support](https://www.unrealengine.com/support) for assistance.
+          pr-comment: >
+            🚫 Epic Games does not accept pull requests on this repository.
+            Please visit [Unreal Engine Support](https://www.unrealengine.com/support) for assistance.
