@@ -3,7 +3,47 @@
 #include "CoreMinimal.h"
 #include "UObject/ObjectMacros.h" // Needed for USTRUCT
 #include "Misc/DateTime.h" // For FDateTime
+#include "Core/HexadecimalStateLattice.h" // Assuming this refers to the previous version of HexadecimalStateLattice.h
 
+// Constructor: FHexadecimalStateLattice() is often defined in the header for structs, but can be here.
+// FHexadecimalStateLattice::FHexadecimalStateLattice()
+//     : Amplitude(0.0f), Phase(0.0f), EntanglementStrength(0.0f)
+// {
+//     StateVector.Init(0x0, 16);
+//     LastEvolution = FDateTime::UtcNow();
+// }
+
+// Implementation for GetNormalizedScalar
+float FHexadecimalStateLattice::GetNormalizedScalar() const
+{
+    if (StateVector.Num() == 0) return 0.0f;
+    float Sum = 0.0f;
+    for (uint8 Val : StateVector)
+    {
+        Sum += (float)Val;
+    }
+    return FMath::Clamp(Sum / (StateVector.Num() * 15.0f), 0.0f, 1.0f);
+}
+
+// Implementation for Evolve
+void FHexadecimalStateLattice::Evolve(float Influence, float DeltaTime)
+{
+    for (uint8& Val : StateVector)
+    {
+        Val = FMath::Clamp((int32)Val + FMath::RandRange(-1, 1), 0, 0xF);
+    }
+
+    Amplitude = FMath::Lerp(Amplitude, FMath::Abs(Influence), DeltaTime * 0.5f);
+    Amplitude = FMath::Clamp(Amplitude, 0.0f, 1.0f);
+
+    Phase += Influence * DeltaTime * 0.1f;
+    Phase = FMath::Fmod(Phase, PI * 2.0f);
+
+    EntanglementStrength = FMath::Lerp(EntanglementStrength, 0.0f, DeltaTime * 0.01f);
+    EntanglementStrength = FMath::Clamp(EntanglementStrength, 0.0f, 1.0f);
+
+    LastEvolution = FDateTime::UtcNow();
+}
 /**
  * @brief Represents a quantum-analog state within the Hexademic consciousness system.
  * This struct models consciousness state using a hexadecimal-like vector, amplitude,
