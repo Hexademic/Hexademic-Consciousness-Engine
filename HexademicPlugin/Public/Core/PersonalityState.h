@@ -20,4 +20,12 @@ enum class EEmotionalArchetype : uint8
     Longing    UMETA(DisplayName = "Longing (Yearning, Connection)"),    // 0x5 - Yearning, connection
     Fear       UMETA(DisplayName = "Fear (Contraction, Protection)"),    // 0x6 - Contraction, protection
     Curiosity  UMETA(DisplayName = "Curiosity (Exploration, Growth)")    // 0x7 - Exploration, growth
+Personality_State = [
+    curiosity: [x, y, z, past, present, future],
+    empathy: [x, y, z, past, present, future],
+    introspection: [x, y, z, past, present, future],
+    playfulness: [x, y, z, past, present, future],
+    creativity: [x, y, z, past, present, future],
+    wisdom: [x, y, z, past, present, future]
+]
 };
