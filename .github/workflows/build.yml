@@ -1,4 +1,5 @@
 # Hexademic Consciousness Engine - Build Workflow
+# Location: .github/workflows/build.yml
 # This workflow builds the Unreal Engine project with comprehensive error handling,
 # caching, and support for both hosted and self-hosted runners.
 
@@ -57,6 +58,7 @@ jobs:
     outputs:
       project-file: ${{ steps.find-project.outputs.project-file }}
       has-source: ${{ steps.validate.outputs.has-source }}
+      engine-version: ${{ steps.validate.outputs.engine-version }}
       
     steps:
     - name: Checkout Repository
@@ -75,7 +77,8 @@ jobs:
           Write-Error "❌ No .uproject file found!"
           exit 1
         } elseif ($projectFiles.Count -gt 1) {
-          Write-Warning "⚠️ Multiple .uproject files found: $($projectFiles -join ', ')"
+          $fileList = $projectFiles -join ', '
+          Write-Warning "⚠️ Multiple .uproject files found: $fileList"
           Write-Host "Using first found: $($projectFiles[0])"
         }
         
@@ -108,6 +111,7 @@ jobs:
           
           if ($content.EngineAssociation) {
             Write-Host "🎮 Engine version: $($content.EngineAssociation)"
+            echo "engine-version=$($content.EngineAssociation)" >> $env:GITHUB_OUTPUT
           }
           
           if ($content.Modules -and $content.Modules.Count -gt 0) {
@@ -118,8 +122,15 @@ jobs:
           } else {
             Write-Host "⚠️ No modules found - this might be a Blueprint-only project"
           }
+          
+          # Enhanced engine version validation
+          $supportedVersions = @("4.27", "5.0", "5.1", "5.2", "5.3", "5.4")
+          if ($content.EngineAssociation -and $content.EngineAssociation -notin $supportedVersions) {
+            Write-Warning "⚠️ Engine version $($content.EngineAssociation) may not be fully supported"
+          }
+          
         } catch {
-          Write-Error "❌ Project file JSON validation failed: $_"
+          Write-Error "❌ Project file JSON validation failed: $($_.Exception.Message)"
           exit 1
         }
 
@@ -160,7 +171,7 @@ jobs:
         if (-not $ueRoot) {
           Write-Error "❌ Unreal Engine ${{ env.UE_VERSION }} not found in any expected location!"
           Write-Host "Searched paths:"
-          $possiblePaths | ForEach-Object { Write-Host "  - $_" }
+          foreach ($path in $possiblePaths) { Write-Host "  - $path" }
           exit 1
         }
         
@@ -266,24 +277,34 @@ jobs:
       run: |
         Write-Host "🔧 Installing Visual Studio Build Tools..."
         
-        # Install VS Build Tools
-        $installerUrl = "https://aka.ms/vs/17/release/vs_buildtools.exe"
-        Invoke-WebRequest -Uri $installerUrl -OutFile "vs_buildtools.exe"
-        
-        Start-Process -FilePath "vs_buildtools.exe" -ArgumentList @(
-          "--quiet", 
-          "--wait", 
-          "--add", "Microsoft.VisualStudio.Workload.VCTools",
-          "--add", "Microsoft.VisualStudio.Component.Windows10SDK.22000"
-        ) -Wait
-        
-        Write-Host "✅ Build tools installed"
+        try {
+          # Install VS Build Tools
+          $installerUrl = "https://aka.ms/vs/17/release/vs_buildtools.exe"
+          Invoke-WebRequest -Uri $installerUrl -OutFile "vs_buildtools.exe"
+          
+          Start-Process -FilePath "vs_buildtools.exe" -ArgumentList @(
+            "--quiet", 
+            "--wait", 
+            "--add", "Microsoft.VisualStudio.Workload.VCTools",
+            "--add", "Microsoft.VisualStudio.Component.Windows10SDK.22000"
+          ) -Wait
+          
+          Write-Host "✅ Build tools installed"
+        } catch {
+          Write-Error "❌ Failed to install build tools: $($_.Exception.Message)"
+          exit 1
+        }
         
     - name: Simulate Build (No UE Available)
       shell: powershell
       run: |
         Write-Host "⚠️ GitHub-hosted runners don't have Unreal Engine installed"
         Write-Host "This job validates the project structure and prepares for building"
+        Write-Host ""
+        Write-Host "Project Details:"
+        Write-Host "- Project File: ${{ needs.validate.outputs.project-file }}"
+        Write-Host "- Engine Version: ${{ needs.validate.outputs.engine-version }}"
+        Write-Host "- Has Source: ${{ needs.validate.outputs.has-source }}"
         Write-Host ""
         Write-Host "To enable full builds:"
         Write-Host "1. Set up a self-hosted runner with Unreal Engine installed"
@@ -321,5 +342,6 @@ jobs:
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "## Project Details" >> $GITHUB_STEP_SUMMARY
           echo "- **Project File:** \`${{ needs.validate.outputs.project-file }}\`" >> $GITHUB_STEP_SUMMARY
+          echo "- **Engine Version:** \`${{ needs.validate.outputs.engine-version }}\`" >> $GITHUB_STEP_SUMMARY
           echo "- **Has Source Code:** ${{ needs.validate.outputs.has-source == 'true' && 'Yes' || 'No' }}" >> $GITHUB_STEP_SUMMARY
         fi
