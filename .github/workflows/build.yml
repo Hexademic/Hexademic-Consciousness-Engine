@@ -1,4 +1,7 @@
-name: Build Hexademic
+- name: Build Unreal Project
+  run: |
+    "C:\Program Files\Epic Games\UE_5.3\Engine\Build\BatchFiles\Build.bat" HexademicEditor Win64 Development -Project="${{ github.workspace }}\Hexademic.uproject" -WaitMutex -FromMsBuild
+  shell: cmd
 
 on:
   push:
