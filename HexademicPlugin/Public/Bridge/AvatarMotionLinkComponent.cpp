@@ -44,6 +44,12 @@ void UAvatarMotionLinkComponent::TickComponent(float DeltaTime, ELevelTick TickT
     // - Full body posture adjustments based on Valence/Arousal/Dominance
     // - Gesture generation based on FCognitiveMemoryNode or specific emotional events
     // - Walk cycle modulation
+    // Core functionality areas:
+    - Emotional State → Animation Mapping
+    - Consciousness Level → Movement Patterns  
+    - Memory Triggers → Gesture Responses
+    - Sigil Resonance → Physical Manifestations
+    - Real-time State Synchronization
 }
 
 void UAvatarMotionLinkComponent::SetEmotionMind(UEmotionCognitionComponent* InMind)
