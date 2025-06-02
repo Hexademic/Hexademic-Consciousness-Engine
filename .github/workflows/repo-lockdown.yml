@@ -1,27 +1,46 @@
-name: 'Repo Lockdown'
+name: Hexademic CI
 
 on:
-  issues:
-    types: [opened]
-  pull_request_target:
-    types: [opened]
-  schedule:
-    - cron: '0 * * * *'  # Every hour
+  push:
+    branches:
+      - main
+      - release/*
+  pull_request:
+    branches:
+      - main
+  workflow_dispatch:
 
 permissions:
-  issues: write
-  pull-requests: write
+  contents: read
+  packages: read
 
 jobs:
-  lockdown:
-    runs-on: ubuntu-latest
+  build:
+    name: Build & Package
+    runs-on: windows-latest
+
     steps:
-      - name: Lock issues and PRs
-        uses: dessant/repo-lockdown@v2
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to GitHub Container Registry
+        uses: docker/login-action@v3
         with:
-          issue-comment: >
-            🚫 Epic Games does not accept issues on this repository.
-            Please visit [Unreal Engine Support](https://www.unrealengine.com/support) for assistance.
-          pr-comment: >
-            🚫 Epic Games does not accept pull requests on this repository.
-            Please visit [Unreal Engine Support](https://www.unrealengine.com/support) for assistance.
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Pull Unreal Engine base image
+        run: |
+          docker pull ghcr.io/epicgames/unreal-engine:5.3.2-windows
+
+      - name: Build Docker image
+        run: |
+          docker build -t ghcr.io/hexademic/hexademic-consciousness-engine:latest .
+
+      - name: Push Docker image
+        run: |
+          docker push ghcr.io/hexademic/hexademic-consciousness-engine:latest
