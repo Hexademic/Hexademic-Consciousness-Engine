@@ -1,54 +1,32 @@
-name: Unreal Engine C++ CI
+name: Unreal Engine 5.3.2 Build
 
 on:
   push:
-    branches: [ "Source" ]
+    branches: [main]
   pull_request:
-    branches: [ "Source" ]
 
 jobs:
   build:
-    container: ghcr.io/epicgames/unreal-engine:5.3.2-windows # Replace with an accessible image
-    runs-on: ubuntu-latest
+    runs-on: windows-latest
+    env:
+      DOCKER_USER: ${{ secrets.GHCR_USER || github.actor }}
+      DOCKER_PASSWORD: ${{ secrets.GHCR_PAT || secrets.GITHUB_TOKEN }}
     steps:
-    - uses: actions/checkout@v4
-    - name: Build Unreal Project/Plugin
-      run: |
-        UE_ROOT="/home/ue4/UnrealEngine"  # Adjust path based on the new image's docs
-        cd ${{ github.workspace }}
-        chmod +x "${UE_ROOT}/Engine/Build/BatchFiles/RunUAT.sh"
-        "${UE_ROOT}/Engine/Build/BatchFiles/RunUAT.sh" BuildCookRun \
-        -project="${{ github.workspace }}/YourProjectName.uproject" \
-        -noP4 \
-        -platform=Linux \
-        -clientconfig=Development \
-        -build \
-        -plugin="HexademicPlugin" \
-        -skipcook \
-        -pak \
-        -nocompileeditor \
-        -stage \
-        -stagingdirectory="${{ github.workspace }}/StagingBuild" \
-        -utf8output |
-        # Adjust this path based on the Docker image's UE installation location.
-        UE_ROOT="/home/ue4/UnrealEngine" # Common path in some UE Docker images
+      - name: Checkout repository
+        uses: actions/checkout@v4
 
-        # Navigate to your project root within the container's workspace
-        cd ${{ github.workspace }}
+      - name: Login to GitHub Container Registry
+        run: echo $env:DOCKER_PASSWORD | docker login ghcr.io -u $env:DOCKER_USER --password-stdin
+        shell: pwsh
 
-        # Ensure RunUAT.sh is executable (it usually is in UE Docker images, but good for safety)
-        chmod +x "${UE_ROOT}/Engine/Build/BatchFiles/RunUAT.sh"
+      - name: Pull Unreal Engine Docker Image
+        run: |
+          docker pull ghcr.io/epicgames/unreal-engine:5.3.2-windows
+        shell: pwsh
 
-        "${UE_ROOT}/Engine/Build/BatchFiles/RunUAT.sh" BuildCookRun \
-        -project="${{ github.workspace }}/YourProjectName.uproject" \
-        -noP4 \
-        -platform=Linux \
-        -clientconfig=Development \
-        -build \
-        -plugin="HexademicPlugin" \
-        -skipcook \
-        -pak \
-        -nocompileeditor \
-        -stage \
-        -stagingdirectory="${{ github.workspace }}/StagingBuild" \
-        -utf8output
+      # Optional: Run your build inside the container
+      # - name: Build in Unreal Container
+      #   run: |
+      #     docker run --rm -v "${{ github.workspace }}:/workspace" ghcr.io/epicgames/unreal-engine:5.3.2-windows BuildCommandHere
+
+    # Add your additional build, test, or artifact steps here
