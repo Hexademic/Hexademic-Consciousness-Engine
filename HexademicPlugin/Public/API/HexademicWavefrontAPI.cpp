@@ -1,4 +1,4 @@
-#include "HexademicWavefrontAPI.h"
+#include "API/HexademicWavefrontAPI.h" // Corrected path to API folder
 #include "RHICommandList.h"
 #include "RenderGraphUtils.h"
 #include "GlobalShader.h"
@@ -23,6 +23,7 @@ void UHexademicWavefrontAPI::BeginPlay()
     Super::BeginPlay();
     InitializeWavefrontProcessing(); // Initialize GPU resources on game start
 }
+
 void UHexademicWavefrontAPI::EndPlay(const EEndPlayReason::Type EndPlayReason)
 {
     ShutdownWavefrontProcessing(); // Clean up GPU resources on game end
@@ -32,7 +33,8 @@ void UHexademicWavefrontAPI::EndPlay(const EEndPlayReason::Type EndPlayReason)
 void UHexademicWavefrontAPI::TickComponent(float DeltaTime, ELevelTick TickType, FActorComponentTickFunction* ThisTickFunction)
 {
     Super::TickComponent(DeltaTime, TickType, ThisTickFunction);
-    // Periodically process wavefront on GPU
+    
+    // Periodically process sigils and gems on GPU
     AccumulatedWavefrontTime += DeltaTime;
     if (AccumulatedWavefrontTime >= (1.0f / WavefrontUpdateRate))
     {
@@ -192,4 +194,28 @@ void UHexademicWavefrontAPI::ExecuteGemSynthesisComputePass(FRDGBuilder& GraphBu
         DummyGem.CreationTimestamp = FDateTime::UtcNow();
         SynthesizedGems.Add(DummyGem);
     }
+}
+
+void UHexademicWavefrontAPI::ReceiveLatticeSnapshot(const FHexadecimalStateLattice& LatticeSnapshot)
+{
+    ReceivedLatticeSnapshot = LatticeSnapshot;
+    // This is where you would process the received lattice for visualization purposes.
+    // For example, trigger a global visual effect based on OverallCoherence or
+    // highlight specific cells if their Amplitude is high.
+    UE_LOG(LogTemp, Log, TEXT("[WavefrontAPI] Received Lattice Snapshot. Overall Coherence: %.2f, Global Entanglement: %.2f"),
+        LatticeSnapshot.OverallCoherence, LatticeSnapshot.GlobalEntanglementStrength);
+
+    // Example visualization logic (conceptual):
+    // if (LatticeSnapshot.OverallCoherence > 0.8f) {
+    //     // Trigger a cohesive global visual effect
+    // } else if (LatticeSnapshot.OverallCoherence < 0.2f) {
+    //     // Trigger a chaotic or fragmented visual effect
+    // }
+    //
+    // Also, you could iterate specific cells and visualize them:
+    // for (const FHexLatticeCell& Cell : LatticeSnapshot.Cells) {
+    //     if (Cell.Amplitude > 0.7f) {
+    //         // Spawn a small particle or light at the cell's conceptual location
+    //     }
+    // }
 }
