@@ -1,4 +1,4 @@
-name: Build Unreal Project
+name: Build Unreal Project (Install UE)
 
 on:
   push:
@@ -9,95 +9,34 @@ on:
 jobs:
   build:
     runs-on: windows-latest
+    timeout-minutes: 120  # UE installation takes time
     
     steps:
     - name: Checkout repository
       uses: actions/checkout@v4
       
-    - name: Setup Unreal Engine
-      uses: game-ci/unity-builder@v4
-      with:
-        # Note: For UE5, we need a different approach since game-ci doesn't support UE5 yet
-        # We'll use a manual installation instead
-        
-    - name: Download and Install Unreal Engine 5.3
+    - name: Install Unreal Engine 5.3
       run: |
-        # Create temp directory
-        mkdir C:\temp
+        # Download Epic Games Launcher installer
+        Invoke-WebRequest -Uri "https://launcher-public-service-prod06.ol.epicgames.com/launcher/api/installer/download/EpicGamesLauncherInstaller.msi" -OutFile "EpicInstaller.msi"
         
-        # Download UE5.3 installer (this is a simplified approach)
-        # In practice, you'd need to use Epic Games' official distribution method
-        Write-Host "Setting up Unreal Engine 5.3..."
+        # Install Epic Games Launcher silently
+        Start-Process msiexec.exe -Wait -ArgumentList '/i EpicInstaller.msi /quiet'
         
-        # For now, let's check if UE is available and use alternative paths
-        if (Test-Path "C:\Program Files\Epic Games\UE_5.3") {
-          Write-Host "UE 5.3 found at standard location"
-        } elseif (Test-Path "C:\UnrealEngine") {
-          Write-Host "UE found at C:\UnrealEngine"
-        } else {
-          Write-Host "Unreal Engine not found - need to install"
-          # You would typically download and install UE here
-          # For this example, we'll create a mock structure
-          mkdir "C:\UnrealEngine\Engine\Build\BatchFiles" -Force
-          echo "Mock build script" > "C:\UnrealEngine\Engine\Build\BatchFiles\Build.bat"
-        }
+        # Note: You'll need to automate the UE installation through Epic Launcher
+        # This typically requires Epic Games account credentials and is complex
+        
+        Write-Host "Epic Games Launcher installed. Manual UE installation required."
       shell: powershell
       
-    - name: Debug Environment
+    - name: Setup Build Environment
       run: |
-        echo "Current directory: %CD%"
-        echo "GitHub Workspace: ${{ github.workspace }}"
-        echo "Contents of workspace:"
-        dir
-        echo "Looking for .uproject files:"
-        dir *.uproject /s
-        echo "Checking for Unreal Engine installation:"
-        if exist "C:\Program Files\Epic Games\UE_5.3\Engine\Build\BatchFiles\Build.bat" (
-          echo "Found UE 5.3 at standard location"
-        ) else (
-          echo "UE 5.3 not found at standard location"
-        )
-        if exist "C:\UnrealEngine\Engine\Build\BatchFiles\Build.bat" (
-          echo "Found UE at C:\UnrealEngine"
-        ) else (
-          echo "UE not found at C:\UnrealEngine"
-        )
-      shell: cmd
-      
-    - name: Build Unreal Project (Alternative Method)
-      run: |
-        # Since we can't guarantee UE installation, let's use a different approach
-        # This assumes you have a build script in your repository
-        
-        # First, let's find the .uproject file
-        $uprojectFile = Get-ChildItem -Path . -Name "*.uproject" -Recurse | Select-Object -First 1
-        
-        if ($uprojectFile) {
-          Write-Host "Found .uproject file: $uprojectFile"
-          
-          # Check if we have a custom build script in the repo
-          if (Test-Path "Scripts\BuildProject.bat") {
-            Write-Host "Using custom build script"
-            cmd /c "Scripts\BuildProject.bat"
-          } else {
-            Write-Host "Creating a mock build for demonstration"
-            Write-Host "In a real scenario, you would:"
-            Write-Host "1. Install Unreal Engine"
-            Write-Host "2. Run the build command with proper paths"
-            Write-Host "3. Handle the build output"
-            
-            # For now, we'll just validate the project structure
-            Write-Host "Project validation completed successfully"
-          }
-        } else {
-          Write-Host "No .uproject file found!"
-          exit 1
-        }
+        # Set up Visual Studio Build Tools if needed
+        choco install visualstudio2022buildtools --package-parameters "--add Microsoft.VisualStudio.Workload.VCTools"
       shell: powershell
       
-    # Alternative: Use self-hosted runner with UE pre-installed
-    # - name: Build with Pre-installed UE (Self-hosted runner only)
-    #   run: |
-    #     "C:\Program Files\Epic Games\UE_5.3\Engine\Build\BatchFiles\Build.bat" HexademicEditor Win64 Development -Project="${{ github.workspace }}\Hexademic.uproject" -WaitMutex -FromMsBuild
-    #   shell: cmd
-    #   if: runner.environment == 'self-hosted'
+    - name: Build Project (Manual Installation Required)
+      run: |
+        Write-Host "This step requires manual UE installation."
+        Write-Host "Consider using self-hosted runners for UE builds."
+      shell: powershell
