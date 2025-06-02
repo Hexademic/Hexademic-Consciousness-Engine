@@ -3,7 +3,7 @@
 #include "CoreMinimal.h"
 #include "Components/ActorComponent.h"
 #include "Core/EmotionalArchetype.h"       // For EEmotionalArchetype
-#include "Core/HexadecimalStateLattice.h" // For FHexadecimalStateLattice
+#include "Core/HexadecimalStateLattice.h" // NEW: For FHexadecimalStateLattice (Advanced)
 #include "Core/ConsciousnessState.h"      // For FConsciousnessState
 #include "Core/QuantumAnalogState.h"      // For FQuantumAnalogState
 #include "HexademicCore.h"                // For FEmotionalState, FUnifiedConsciousnessState, etc.
@@ -22,16 +22,17 @@ class UCreativeSynthesizer;
 class UEnvironmentalResonator;
 class UIncrementalPersister;
 class UEmpathicFieldComponent;
-class UFractalConsciousnessManagerComponent; // If it's a sub-component of this
+class UFractalConsciousnessManagerComponent;
+class UHexademicWavefrontAPI; // NEW: For passing lattice snapshots
 
 // Enum for Consciousness LOD (Level of Detail) as per your analysis
 UENUM(BlueprintType)
 enum class EConsciousnessLOD : uint8
 {
-    Full        UMETA(DisplayName = "Full Simulation (Complete)"),      // Complete consciousness simulation [cite: 216]
-    Reduced     UMETA(DisplayName = "Reduced Simulation (Simplified)"),   // Simplified emotional processing [cite: 216]
-    Minimal     UMETA(DisplayName = "Minimal Simulation (Basic)"),      // Basic state tracking only [cite: 216]
-    Dormant     UMETA(DisplayName = "Dormant (Paused)")                 // Consciousness paused [cite: 216]
+    Full        UMETA(DisplayName = "Full Simulation (Complete)"),      // Complete consciousness simulation [cite: 109]
+    Reduced     UMETA(DisplayName = "Reduced Simulation (Simplified)"),   // Simplified emotional processing  [cite: 109]
+    Minimal     UMETA(DisplayName = "Minimal Simulation (Basic)"),      // Basic state tracking only [cite: 109]
+    Dormant     UMETA(DisplayName = "Dormant (Paused)")                 // Consciousness paused [cite: 109]
 };
 
 
@@ -71,20 +72,22 @@ public:
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "References|Intersubjective")
     TObjectPtr<UEmpathicFieldComponent> EmpathicField;
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "References|Fractal")
-    TObjectPtr<UFractalConsciousnessManagerComponent> FractalManager; // If this component contains the FractalManager
+    TObjectPtr<UFractalConsciousnessManagerComponent> FractalManager;
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "References|API") // NEW: For Wavefront API
+    TObjectPtr<UHexademicWavefrontAPI> WavefrontAPI; // NEW: To send lattice snapshots
 
     // === CORE CONSCIOUSNESS STATE REPRESENTATIONS ===
     // This component aggregates and manages the various state representations.
     UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Consciousness State")
     FConsciousnessState CurrentConsciousnessState; // The high-level consolidated state
     UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Consciousness State")
-    FHexadecimalStateLattice HexLattice; // The low-level quantum-analog state
+    FHexadecimalStateLattice HexLattice; // NEW: The advanced 6D Folding Matrix [cite: 75]
     UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Consciousness State")
     FQuantumAnalogState QuantumState; // The abstract quantum state
 
     // === CONFIGURATION AND TUNING ===
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Consciousness Config")
-    EConsciousnessLOD CurrentLOD = EConsciousnessLOD::Full; // Current Consciousness LOD [cite: 216]
+    EConsciousnessLOD CurrentLOD = EConsciousnessLOD::Full; // Current Consciousness LOD
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Consciousness Config")
     float UpdateFrequency = 30.0f; // How often the consciousness state is updated (Hz)
 
@@ -132,7 +135,8 @@ protected:
     void UpdateHormonalState(float DeltaTime);
     void UpdateCognitiveState(float DeltaTime);
     void UpdateIntersubjectiveState(float DeltaTime);
-    void UpdateFractalState(float DeltaTime); // If FractalManager is a sub-component
+    void UpdateFractalState(float DeltaTime);
+    void UpdateLatticeAndQuantumStates(float DeltaTime); // NEW: Dedicated for HexLattice and QuantumState
 
     // Helper to derive the dominant emotional archetype
     EEmotionalArchetype DeriveDominantEmotionalArchetype(const FEmotionalState& Emotion) const;
