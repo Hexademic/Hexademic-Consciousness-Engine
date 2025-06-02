@@ -1,42 +1,325 @@
-name: Build Unreal Project (Install UE)
+# Hexademic Consciousness Engine - Build Workflow
+# This workflow builds the Unreal Engine project with comprehensive error handling,
+# caching, and support for both hosted and self-hosted runners.
+
+name: Build Hexademic Consciousness Engine
 
 on:
   push:
-    branches: [ Source ]
+    branches: [ Source, main ]
+    paths-ignore:
+      - '**.md'
+      - 'docs/**'
+      - '.gitignore'
   pull_request:
-    branches: [ Source ]
+    branches: [ Source, main ]
+    paths-ignore:
+      - '**.md'
+      - 'docs/**'
+      - '.gitignore'
+  workflow_dispatch:  # Allow manual triggering
+    inputs:
+      build_config:
+        description: 'Build Configuration'
+        required: true
+        default: 'Development'
+        type: choice
+        options:
+        - Development
+        - Shipping
+        - DebugGame
+      platform:
+        description: 'Target Platform'
+        required: true
+        default: 'Win64'
+        type: choice
+        options:
+        - Win64
+        - Linux
+        - Mac
+
+env:
+  # Project configuration
+  PROJECT_NAME: "Hexademic"
+  UE_VERSION: "5.3"
+  BUILD_CONFIG: ${{ github.event.inputs.build_config || 'Development' }}
+  PLATFORM: ${{ github.event.inputs.platform || 'Win64' }}
+  
+  # Paths (will be set dynamically based on runner type)
+  UE_ROOT: ""
+  PROJECT_FILE: ""
 
 jobs:
-  build:
+  # Validation job that runs on all runners
+  validate:
+    name: Validate Project Structure
     runs-on: windows-latest
-    timeout-minutes: 120  # UE installation takes time
+    outputs:
+      project-file: ${{ steps.find-project.outputs.project-file }}
+      has-source: ${{ steps.validate.outputs.has-source }}
+      
+    steps:
+    - name: Checkout Repository
+      uses: actions/checkout@v4
+      with:
+        fetch-depth: 1  # Shallow clone for faster checkout
+        
+    - name: Find Project File
+      id: find-project
+      shell: powershell
+      run: |
+        Write-Host "🔍 Searching for .uproject file..."
+        $projectFiles = Get-ChildItem -Name "*.uproject" -Recurse
+        
+        if ($projectFiles.Count -eq 0) {
+          Write-Error "❌ No .uproject file found!"
+          exit 1
+        } elseif ($projectFiles.Count -gt 1) {
+          Write-Warning "⚠️ Multiple .uproject files found: $($projectFiles -join ', ')"
+          Write-Host "Using first found: $($projectFiles[0])"
+        }
+        
+        $projectFile = $projectFiles[0]
+        Write-Host "✅ Found project file: $projectFile"
+        echo "project-file=$projectFile" >> $env:GITHUB_OUTPUT
+        
+    - name: Validate Project Structure
+      id: validate
+      shell: powershell
+      run: |
+        Write-Host "📋 Validating project structure..."
+        
+        # Check critical directories
+        $hasSource = Test-Path "Source"
+        $hasContent = Test-Path "Content" 
+        $hasConfig = Test-Path "Config"
+        
+        Write-Host "Source directory: $(if($hasSource){'✅'}else{'❌'})"
+        Write-Host "Content directory: $(if($hasContent){'✅'}else{'⚠️'})"
+        Write-Host "Config directory: $(if($hasConfig){'✅'}else{'⚠️'})"
+        
+        echo "has-source=$($hasSource.ToString().ToLower())" >> $env:GITHUB_OUTPUT
+        
+        # Validate project file JSON
+        $projectFile = "${{ steps.find-project.outputs.project-file }}"
+        try {
+          $content = Get-Content $projectFile -Raw | ConvertFrom-Json
+          Write-Host "✅ Project file is valid JSON"
+          
+          if ($content.EngineAssociation) {
+            Write-Host "🎮 Engine version: $($content.EngineAssociation)"
+          }
+          
+          if ($content.Modules -and $content.Modules.Count -gt 0) {
+            Write-Host "📦 Found $($content.Modules.Count) module(s):"
+            foreach ($module in $content.Modules) {
+              Write-Host "  - $($module.Name) ($($module.Type))"
+            }
+          } else {
+            Write-Host "⚠️ No modules found - this might be a Blueprint-only project"
+          }
+        } catch {
+          Write-Error "❌ Project file JSON validation failed: $_"
+          exit 1
+        }
+
+  # Build job for self-hosted runners (recommended)
+  build-self-hosted:
+    name: Build (Self-Hosted)
+    runs-on: self-hosted
+    needs: validate
+    if: ${{ needs.validate.outputs.has-source == 'true' }}
     
     steps:
-    - name: Checkout repository
+    - name: Checkout Repository
+      uses: actions/checkout@v4
+      with:
+        clean: true  # Ensure clean workspace
+        
+    - name: Setup Environment
+      shell: powershell
+      run: |
+        Write-Host "🔧 Setting up build environment..."
+        
+        # Detect Unreal Engine installation
+        $possiblePaths = @(
+          "C:\Program Files\Epic Games\UE_${{ env.UE_VERSION }}",
+          "C:\UnrealEngine",
+          "D:\UnrealEngine",
+          "C:\Epic Games\UE_${{ env.UE_VERSION }}"
+        )
+        
+        $ueRoot = $null
+        foreach ($path in $possiblePaths) {
+          if (Test-Path "$path\Engine\Build\BatchFiles\Build.bat") {
+            $ueRoot = $path
+            break
+          }
+        }
+        
+        if (-not $ueRoot) {
+          Write-Error "❌ Unreal Engine ${{ env.UE_VERSION }} not found in any expected location!"
+          Write-Host "Searched paths:"
+          $possiblePaths | ForEach-Object { Write-Host "  - $_" }
+          exit 1
+        }
+        
+        Write-Host "✅ Found Unreal Engine at: $ueRoot"
+        echo "UE_ROOT=$ueRoot" >> $env:GITHUB_ENV
+        
+        # Set project file path
+        $projectFile = Join-Path $env:GITHUB_WORKSPACE "${{ needs.validate.outputs.project-file }}"
+        echo "PROJECT_FILE=$projectFile" >> $env:GITHUB_ENV
+        
+    - name: Clean Previous Build
+      shell: powershell
+      run: |
+        Write-Host "🧹 Cleaning previous build artifacts..."
+        
+        $cleanPaths = @("Binaries", "Intermediate", "Saved\Logs")
+        foreach ($path in $cleanPaths) {
+          if (Test-Path $path) {
+            Write-Host "Removing $path..."
+            Remove-Item $path -Recurse -Force -ErrorAction SilentlyContinue
+          }
+        }
+        
+    - name: Build Project
+      shell: cmd
+      run: |
+        echo 🔨 Building %PROJECT_NAME% for %PLATFORM% %BUILD_CONFIG%...
+        
+        "%UE_ROOT%\Engine\Build\BatchFiles\Build.bat" ^
+          %PROJECT_NAME%Editor %PLATFORM% %BUILD_CONFIG% ^
+          -Project="%PROJECT_FILE%" ^
+          -WaitMutex ^
+          -FromMsBuild ^
+          -Verbose
+          
+        if %ERRORLEVEL% NEQ 0 (
+          echo ❌ Build failed with error code %ERRORLEVEL%
+          exit /b %ERRORLEVEL%
+        )
+        
+        echo ✅ Build completed successfully!
+        
+    - name: Package Project (Optional)
+      if: ${{ env.BUILD_CONFIG == 'Shipping' }}
+      shell: cmd
+      run: |
+        echo 📦 Packaging project for distribution...
+        
+        "%UE_ROOT%\Engine\Build\BatchFiles\RunUAT.bat" BuildCookRun ^
+          -project="%PROJECT_FILE%" ^
+          -noP4 ^
+          -platform=%PLATFORM% ^
+          -clientconfig=%BUILD_CONFIG% ^
+          -cook ^
+          -allmaps ^
+          -build ^
+          -stage ^
+          -pak ^
+          -archive ^
+          -archivedirectory="%GITHUB_WORKSPACE%\PackagedBuild"
+          
+    - name: Upload Build Artifacts
+      uses: actions/upload-artifact@v4
+      if: success()
+      with:
+        name: ${{ env.PROJECT_NAME }}-${{ env.PLATFORM }}-${{ env.BUILD_CONFIG }}
+        path: |
+          Binaries/
+          !Binaries/**/*.pdb
+        retention-days: 7
+        
+    - name: Upload Package (if created)
+      uses: actions/upload-artifact@v4
+      if: ${{ success() && env.BUILD_CONFIG == 'Shipping' }}
+      with:
+        name: ${{ env.PROJECT_NAME }}-Package-${{ env.PLATFORM }}
+        path: PackagedBuild/
+        retention-days: 30
+
+  # Fallback build for hosted runners (limited functionality)
+  build-hosted:
+    name: Build (GitHub-Hosted - Limited)
+    runs-on: windows-latest
+    needs: validate
+    if: ${{ needs.validate.outputs.has-source == 'true' && !contains(github.repository, 'self-hosted') }}
+    timeout-minutes: 60
+    
+    steps:
+    - name: Checkout Repository
       uses: actions/checkout@v4
       
-    - name: Install Unreal Engine 5.3
-      run: |
-        # Download Epic Games Launcher installer
-        Invoke-WebRequest -Uri "https://launcher-public-service-prod06.ol.epicgames.com/launcher/api/installer/download/EpicGamesLauncherInstaller.msi" -OutFile "EpicInstaller.msi"
-        
-        # Install Epic Games Launcher silently
-        Start-Process msiexec.exe -Wait -ArgumentList '/i EpicInstaller.msi /quiet'
-        
-        # Note: You'll need to automate the UE installation through Epic Launcher
-        # This typically requires Epic Games account credentials and is complex
-        
-        Write-Host "Epic Games Launcher installed. Manual UE installation required."
+    - name: Cache Build Tools
+      uses: actions/cache@v4
+      with:
+        path: |
+          C:\Program Files (x86)\Microsoft Visual Studio\2022\BuildTools
+        key: ${{ runner.os }}-buildtools-${{ hashFiles('**/*.sln', '**/*.vcxproj') }}
+        restore-keys: |
+          ${{ runner.os }}-buildtools-
+          
+    - name: Setup Build Tools
       shell: powershell
-      
-    - name: Setup Build Environment
       run: |
-        # Set up Visual Studio Build Tools if needed
-        choco install visualstudio2022buildtools --package-parameters "--add Microsoft.VisualStudio.Workload.VCTools"
+        Write-Host "🔧 Installing Visual Studio Build Tools..."
+        
+        # Install VS Build Tools
+        $installerUrl = "https://aka.ms/vs/17/release/vs_buildtools.exe"
+        Invoke-WebRequest -Uri $installerUrl -OutFile "vs_buildtools.exe"
+        
+        Start-Process -FilePath "vs_buildtools.exe" -ArgumentList @(
+          "--quiet", 
+          "--wait", 
+          "--add", "Microsoft.VisualStudio.Workload.VCTools",
+          "--add", "Microsoft.VisualStudio.Component.Windows10SDK.22000"
+        ) -Wait
+        
+        Write-Host "✅ Build tools installed"
+        
+    - name: Simulate Build (No UE Available)
       shell: powershell
-      
-    - name: Build Project (Manual Installation Required)
       run: |
-        Write-Host "This step requires manual UE installation."
-        Write-Host "Consider using self-hosted runners for UE builds."
-      shell: powershell
+        Write-Host "⚠️ GitHub-hosted runners don't have Unreal Engine installed"
+        Write-Host "This job validates the project structure and prepares for building"
+        Write-Host ""
+        Write-Host "To enable full builds:"
+        Write-Host "1. Set up a self-hosted runner with Unreal Engine installed"
+        Write-Host "2. Or use Epic Games' official build infrastructure"
+        Write-Host ""
+        Write-Host "✅ Project validation and environment setup completed"
+
+  # Report build status
+  report:
+    name: Build Report
+    runs-on: ubuntu-latest
+    needs: [validate, build-self-hosted, build-hosted]
+    if: always()
+    
+    steps:
+    - name: Generate Build Report
+      run: |
+        echo "# 🎮 Hexademic Consciousness Engine Build Report" >> $GITHUB_STEP_SUMMARY
+        echo "" >> $GITHUB_STEP_SUMMARY
+        echo "**Project:** ${{ env.PROJECT_NAME }}" >> $GITHUB_STEP_SUMMARY
+        echo "**Platform:** ${{ env.PLATFORM }}" >> $GITHUB_STEP_SUMMARY
+        echo "**Configuration:** ${{ env.BUILD_CONFIG }}" >> $GITHUB_STEP_SUMMARY
+        echo "**Commit:** \`${{ github.sha }}\`" >> $GITHUB_STEP_SUMMARY
+        echo "" >> $GITHUB_STEP_SUMMARY
+        
+        # Job status
+        echo "## Job Results" >> $GITHUB_STEP_SUMMARY
+        echo "| Job | Status |" >> $GITHUB_STEP_SUMMARY
+        echo "|-----|--------|" >> $GITHUB_STEP_SUMMARY
+        echo "| Validation | ${{ needs.validate.result == 'success' && '✅ Passed' || '❌ Failed' }} |" >> $GITHUB_STEP_SUMMARY
+        echo "| Self-Hosted Build | ${{ needs.build-self-hosted.result == 'success' && '✅ Passed' || needs.build-self-hosted.result == 'skipped' && '⏭️ Skipped' || '❌ Failed' }} |" >> $GITHUB_STEP_SUMMARY
+        echo "| Hosted Build | ${{ needs.build-hosted.result == 'success' && '✅ Passed' || needs.build-hosted.result == 'skipped' && '⏭️ Skipped' || '❌ Failed' }} |" >> $GITHUB_STEP_SUMMARY
+        
+        if [[ "${{ needs.validate.result }}" == "success" ]]; then
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "## Project Details" >> $GITHUB_STEP_SUMMARY
+          echo "- **Project File:** \`${{ needs.validate.outputs.project-file }}\`" >> $GITHUB_STEP_SUMMARY
+          echo "- **Has Source Code:** ${{ needs.validate.outputs.has-source == 'true' && 'Yes' || 'No' }}" >> $GITHUB_STEP_SUMMARY
+        fi
