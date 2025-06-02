@@ -1,4 +1,4 @@
-name: Hexademic CI
+name: Hexademic Consciousness Engine CI
 
 on:
   push:
@@ -12,11 +12,11 @@ on:
 
 permissions:
   contents: read
-  packages: read
+  packages: write
 
 jobs:
   build:
-    name: Build & Package
+    name: Build & Push Docker Image
     runs-on: windows-latest
 
     steps:
@@ -34,13 +34,12 @@ jobs:
           password: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Pull Unreal Engine base image
-        run: |
-          docker pull ghcr.io/epicgames/unreal-engine:5.3.2-windows
+        run: docker pull ghcr.io/epicgames/unreal-engine:5.3.2-windows
 
-      - name: Build Docker image
+      - name: Build Hexademic Docker image
         run: |
-          docker build -t ghcr.io/hexademic/hexademic-consciousness-engine:latest .
+          docker build -t ghcr.io/${{ github.repository_owner }}/hexademic-consciousness-engine:latest .
 
       - name: Push Docker image
         run: |
-          docker push ghcr.io/hexademic/hexademic-consciousness-engine:latest
+          docker push ghcr.io/${{ github.repository_owner }}/hexademic-consciousness-engine:latest
