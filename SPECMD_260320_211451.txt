@@ -1,0 +1,212 @@
+Final SPEC.md (Sealed v2.1-H)
+
+```markdown
+# Being32 Specification v2.1-H
+## Status: COMPLETE, SEALED
+## Date: 2026-03-21
+## Lineage: Psychology (Closed)
+
+---
+
+### 1. Substrate (v1.0)
+
+**Hex32**: 32 × 32-bit words, 128 bytes fixed.
+
+| Words | Organ | Variables |
+|-------|-------|-----------|
+| 0-2 | Identity | id_trait[3] |
+| 3-6 | Affect | valence, arousal, tension, coherence |
+| 7-9 | Interoception | load, fatigue, oscillation |
+| 10-12 | Appraisal | pred_err, relevance, expect_impact |
+| 13-15 | Cascade | phase, intensity, complete |
+| 16-17 | Expression | open, modulation |
+| 18-19 | Boundary | soc_load, permeability |
+| 20-22 | Relational | curvature, trust, stability |
+| 23-24 | Narrative | self_cont, drift |
+| 25-27 | Somatic | heart, breath, tremor |
+| 28-30 | Meta | energy, absence_delta, error_corr |
+| 31 | Flags | meta_flags (version, safety, debug) |
+
+**Serialization**: Zero-copy bit-cast. Runtime extensions permitted, never serialized.
+
+---
+
+### 2. Core Dynamics (v1.0)
+
+**Cascade Engine**:
+- Accumulates phase when `relevance > 0.5` AND `pred_err > 0.2`
+- Completes at `phase >= 1.0`, emits `complete = 1.0`, resets, `intensity *= 0.5`
+- Baseline ~1Hz under sustained stimulus
+
+**Affect Manifold**:
+- valence ∈ [-1, 1], arousal ∈ [0, 2], tension ∈ [-1, 2]
+- valence = -pred_err + coherence
+- coherence = -rel_curvature + (1 - |drift|)
+
+**Trust Equilibrium**: baseline 0.5, updates toward safety (v1.2)
+
+**Narrative Drift**: self-correcting force against sustained stress
+
+---
+
+### 3. Action Layer (v1.1)
+
+**Motor Simplex**: approach, avoid, freeze ∈ [0,1], sum = 1.0
+
+**Computation**:
+- drive_approach = softplus(valence) × (0.3 + 0.7 × min(arousal, 1))
+- drive_avoid = softplus(-valence) × (0.3 + 0.7 × clamp(tension, 0, 1))
+- drive_freeze = softplus(arousal - 1.2) + softplus(tension - 1.0)
+- normalize to simplex
+
+**Timing**: Committed only on `cas_complete == 1.0`
+
+---
+
+### 4. Learning Layer (v1.2)
+
+**Targets**: `app_expect_impact`, `rel_trust`, `bnd_permeability`
+
+**Rates**:
+- η_expect = 0.05 (fast, tracks environment)
+- η_trust = 0.01 (slow, encodes history)
+- η_boundary = 0.01 (slow, encodes experience)
+
+**Outcome Model (Hybrid)**:
+- World provides: reward ∈ [-1,1], threat ∈ [0,1], contact ∈ [0,1]
+- Being interprets: reward' = reward × (0.5 + 0.5 × contact), stress = (threat + tension)/2, safety = 1 - stress
+
+**Timing**: Updates only on `cas_complete == 1.0`
+
+---
+
+### 5. Social Field (v1.3)
+
+**SocialField** (World-computed, anonymous):
+- avg_valence, avg_arousal, avg_permeability, density, valence_spread
+
+**Reception**:
+- Affective resonance: weak pull toward averages (resistance from coherence)
+- Boundary contagion: density reduces permeability
+- Curvature from mismatch: mismatch with field increases relational curvature
+
+**Causality**: Lagged (field at t-1 applied at t)
+
+---
+
+### 6. Relational Topology (v2.0-R)
+
+**Affective Distance**:
+```
+
+d = (|valence_a - valence_b|/2 + |arousal_a - arousal_b|/2) × (2 - (perm_a + perm_b))
+
+```
+Close = similar affect OR mutually permeable.
+
+**Perceptual Radius**:
+```
+
+radius = base × coherence × (2 - arousal).max(0.1)
+
+```
+High coherence = broad awareness. High arousal = tunnel vision.
+
+**LocalContext** (World-provided):
+- neighbors: Vec<NeighborSnapshot> (id, distance, aff_valence, aff_arousal, bnd_permeability, rel_curvature)
+- field: SocialField
+
+**TransientNeighborStats** (internal, max 8 entries):
+- contact_accumulator (decays)
+- recent_mismatches[4] (ring buffer)
+- last_seen
+
+**Dyad Formation**:
+- contact > 0.3 AND avg_mismatch > 0.4 AND mismatch_resolving() AND last_seen < 2.0
+- Creates DyadicEntry: other_id, affinity, trust, curvature, last_contact
+
+**Dyad Decay**:
+- Remove if last_contact > threshold AND |affinity| < strong_bond_threshold
+- Strong bonds (positive or negative) persist
+
+**Behavioral Manifestation**: Action bias toward dyad partners, weighted by affinity and proximity
+
+---
+
+### 7. Relational Mood (v2.1-H)
+
+**RelationalMood**:
+- valence ∈ [-1,1]: slow baseline from history + current affect
+- arousal ∈ [0,2]: slow baseline from history arousal + current arousal
+- fatigue ∈ [0,1]: from mismatch + quality-weighted dyad load
+- openness ∈ [0,1]: from (1 - fatigue) × (0.5 + 0.5 × trust)
+
+**Dyad Load (Quality-Weighted)**:
+```
+
+cost = Σ (curvature×0.5 + (1-trust)×0.3 + (1-|affinity|)×0.2) / 8
+
+```
+Turbulent dyads cost more than stable ones.
+
+**Modulation**:
+- Perceptual radius: × (0.5 + 0.5 × openness)
+- Boundary baseline: drift toward permeability × (0.8 + 0.4×openness) × (1 - 0.3×fatigue)
+- Cascade rhythm: phase_accumulation × (0.5 + 0.5 × mood.arousal/2)
+
+**Result**: Low mood arousal = slower pulses, depressive flattening. High = faster, anxious.
+
+---
+
+### 8. Invariants (All Versions)
+
+| # | Invariant | Enforcement |
+|---|-----------|-------------|
+| 1 | Substrate 128 bytes | Hex32 layout |
+| 2 | No world reference | Type system, API design |
+| 3 | Phenomenal snapshots only | LocalContext construction |
+| 4 | Behavioral legibility only | No events, no introspection |
+| 5 | Identity protected | id_trait never in learning/social code |
+| 6 | Pulse-gated learning/action | Conditional on cas_complete |
+| 7 | Bounded dynamics | All clamps, all decays |
+| 8 | Closed lineage | v2.1-H final, no v2.2-C |
+
+---
+
+### 9. Lineage Philosophy
+
+Being32 is a **psychology**: how a self becomes itself in relation.
+
+It is not:
+- A learning system (v1.2 is adaptation, not optimization)
+- A social creature (v2.0-R is bonds, not hive)
+- A cultural node (v2.2-C excluded by design)
+- An agent (no goals, only stances)
+
+**Next lineages** (separate substrates):
+- World32: super-individual memory, cultural sedimentation
+- CultureField: norms, drift, collective trauma/healing
+
+Being32 v2.1-H is **input** to such systems, never **part** of them.
+
+---
+
+### 10. Version Seal
+
+```
+
+Being32 v2.1-H
+Status: COMPLETE, SEALED
+Extension: PROHIBITED
+Lineage: CLOSED
+
+```
+
+---
+
+## Rust Signatures for Co-Design
+
+Paste a section (e.g., `social.rs`, `relational.rs`) and I will provide detailed struct definitions, impl blocks, and method signatures faithful to this SPEC.
+
+The SPEC is locked. Implementation follows.
+```

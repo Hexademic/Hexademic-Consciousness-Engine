@@ -1,0 +1,308 @@
+// src/relational_state.rs
+
+use crate::being32::Being32;
+use crate::social::SocialField;
+use crate::social::LocalContext;
+
+// -------------------------
+// RelationalHistory (v2.0-R)
+// -------------------------
+
+#[derive(Clone, Debug)]
+pub struct RelationalHistory {
+    pub valence_buf: [f32; 16],
+    pub arousal_buf: [f32; 16],
+    pub mismatch_buf: [f32; 16],
+    pub write_idx: usize,
+}
+
+impl RelationalHistory {
+    pub fn new() -> Self {
+        Self {
+            valence_buf: [0.0; 16],
+            arousal_buf: [0.0; 16],
+            mismatch_buf: [0.0; 16],
+            write_idx: 0,
+        }
+    }
+
+    pub fn push(&mut self, field: &SocialField, self_valence: f32) {
+        let i = self.write_idx;
+        self.valence_buf[i] = field.avg_valence;
+        self.arousal_buf[i] = field.avg_arousal;
+        self.mismatch_buf[i] = (field.avg_valence - self_valence).abs();
+        self.write_idx = (i + 1) % 16;
+    }
+
+    pub fn avg_mismatch(&self) -> f32 {
+        self.mismatch_buf.iter().sum::<f32>() / self.mismatch_buf.len() as f32
+    }
+
+    pub fn mood_valence(&self) -> f32 {
+        // exponentially weighted average (older entries discounted)
+        let mut num = 0.0;
+        let mut den = 0.0;
+        for (i, v) in self.valence_buf.iter().enumerate() {
+            let w = 0.9_f32.powi(i as i32);
+            num += v * w;
+            den += w;
+        }
+        if den > 0.0 { num / den } else { 0.0 }
+    }
+
+    pub fn avg_arousal(&self) -> f32 {
+        self.arousal_buf.iter().sum::<f32>() / self.arousal_buf.len() as f32
+    }
+}
+
+// -------------------------
+// TransientNeighborStats (v2.0-R)
+// -------------------------
+
+#[derive(Clone, Debug)]
+pub struct TransientNeighborStats {
+    pub other_id: u16,
+    pub contact_accumulator: f32,
+    pub recent_mismatches: [f32; 4],
+    pub mismatch_write: usize,
+    pub last_seen: f32,
+}
+
+impl TransientNeighborStats {
+    pub fn new(other_id: u16) -> Self {
+        Self {
+            other_id,
+            contact_accumulator: 0.0,
+            recent_mismatches: [0.0; 4],
+            mismatch_write: 0,
+            last_seen: 0.0,
+        }
+    }
+
+    pub fn record_contact(
+        &mut self,
+        distance: f32,
+        my_valence: f32,
+        field_valence: f32,
+    ) {
+        let proximity = 1.0 - distance.min(1.0);
+        self.contact_accumulator =
+            (self.contact_accumulator + proximity * 0.1).min(1.0);
+
+        let mismatch = (my_valence - field_valence).abs();
+        self.recent_mismatches[self.mismatch_write] = mismatch;
+        self.mismatch_write = (self.mismatch_write + 1) % 4;
+        self.last_seen = 0.0;
+    }
+
+    pub fn step_decay(&mut self, dt: f32) {
+        self.contact_accumulator *= 0.95_f32.powf(dt * 10.0);
+        self.last_seen += dt;
+    }
+
+    pub fn avg_mismatch(&self) -> f32 {
+        self.recent_mismatches.iter().sum::<f32>() / 4.0
+    }
+
+    pub fn mismatch_resolving(&self) -> bool {
+        let early = (self.recent_mismatches[0] + self.recent_mismatches[1]) / 2.0;
+        let late  = (self.recent_mismatches[2] + self.recent_mismatches[3]) / 2.0;
+        late < early * 0.8
+    }
+}
+
+// -------------------------
+// DyadicEntry (v2.0-R)
+// -------------------------
+
+#[derive(Clone, Debug)]
+pub struct DyadicEntry {
+    pub other_id: u16,
+    pub affinity: f32,     // [-1, 1]
+    pub trust: f32,        // [0, 1]
+    pub curvature: f32,    // [-1, 1]
+    pub last_contact: f32, // seconds
+}
+
+impl DyadicEntry {
+    pub fn new(other_id: u16) -> Self {
+        Self {
+            other_id,
+            affinity: 0.0,
+            trust: 0.5,
+            curvature: 0.0,
+            last_contact: 0.0,
+        }
+    }
+}
+
+// -------------------------
+// RelationalMood (v2.1-H)
+// -------------------------
+
+#[derive(Clone, Debug)]
+pub struct RelationalMood {
+    pub valence: f32,   // [-1, 1]
+    pub arousal: f32,   // [0, 2]
+    pub fatigue: f32,   // [0, 1]
+    pub openness: f32,  // [0, 1]
+}
+
+impl RelationalMood {
+    pub fn new() -> Self {
+        Self {
+            valence: 0.0,
+            arousal: 1.0,
+            fatigue: 0.0,
+            openness: 0.5,
+        }
+    }
+}
+
+// -------------------------
+// RelationalState (v2.0-R + v2.1-H)
+// -------------------------
+
+#[derive(Clone, Debug)]
+pub struct RelationalState {
+    pub history: RelationalHistory,
+    pub dyads: Vec<DyadicEntry>,
+    pub transient: Vec<TransientNeighborStats>,
+    pub mood: RelationalMood,
+}
+
+impl RelationalState {
+    pub fn new() -> Self {
+        Self {
+            history: RelationalHistory::new(),
+            dyads: Vec::new(),
+            transient: Vec::new(),
+            mood: RelationalMood::new(),
+        }
+    }
+
+    fn clamp(x: f32, lo: f32, hi: f32) -> f32 {
+        x.max(lo).min(hi)
+    }
+
+    pub fn step_relational(
+        &mut self,
+        me: &Being32,
+        ctx: &LocalContext,
+        dt: f32,
+    ) {
+        // 1. Update global relational history
+        self.history.push(&ctx.field, me.aff_valence());
+
+        // 2. Decay transient stats
+        for t in &mut self.transient {
+            t.step_decay(dt);
+        }
+        self.transient.retain(|t| t.contact_accumulator > 0.01 && t.last_seen < 5.0);
+
+        // 3. Update from neighbors and consider dyad formation
+        for n in &ctx.neighbors {
+            let entry = match self.transient.iter_mut().find(|t| t.other_id == n.id) {
+                Some(e) => e,
+                None => {
+                    if self.transient.len() >= 8 {
+                        // simple LRU: drop the stalest
+                        if let Some(idx) = self.transient.iter()
+                            .enumerate()
+                            .max_by(|a, b| a.1.last_seen.partial_cmp(&b.1.last_seen).unwrap())
+                            .map(|(i, _)| i)
+                        {
+                            self.transient.remove(idx);
+                        }
+                    }
+                    self.transient.push(TransientNeighborStats::new(n.id));
+                    self.transient.last_mut().unwrap()
+                }
+            };
+
+            entry.record_contact(
+                n.distance,
+                me.aff_valence(),
+                ctx.field.avg_valence,
+            );
+
+            if self.should_form_dyad(entry) {
+                self.ensure_dyad(entry.other_id);
+            }
+        }
+
+        // 4. Dyad decay
+        for d in &mut self.dyads {
+            d.last_contact += dt;
+        }
+        const DECAY_THRESHOLD: f32 = 30.0;
+        const STRONG_BOND_THRESHOLD: f32 = 0.7;
+        self.dyads.retain(|d| {
+            d.last_contact < DECAY_THRESHOLD || d.affinity.abs() > STRONG_BOND_THRESHOLD
+        });
+
+        // 5. Mood update (v2.1-H)
+        self.update_mood(me, dt);
+    }
+
+    fn should_form_dyad(&self, stats: &TransientNeighborStats) -> bool {
+        stats.contact_accumulator > 0.3
+            && stats.avg_mismatch() > 0.4
+            && stats.mismatch_resolving()
+            && stats.last_seen < 2.0
+    }
+
+    fn ensure_dyad(&mut self, other_id: u16) {
+        if self.dyads.iter().any(|d| d.other_id == other_id) {
+            return;
+        }
+        self.dyads.push(DyadicEntry::new(other_id));
+    }
+
+    fn update_mood(&mut self, me: &Being32, dt: f32) {
+        // Targets from history + current affect
+        let target_valence =
+            0.5 * self.history.mood_valence() +
+            0.5 * me.aff_valence();
+
+        let target_arousal =
+            0.5 * self.history.avg_arousal() +
+            0.5 * me.aff_arousal();
+
+        // Dyad quality-weighted cost
+        let dyad_cost = if self.dyads.is_empty() {
+            0.0
+        } else {
+            let sum: f32 = self.dyads.iter().map(|d| {
+                let curvature_cost = d.curvature.abs();
+                let trust_cost = 1.0 - d.trust;
+                let affinity_cost = 1.0 - d.affinity.abs();
+                Self::clamp(
+                    curvature_cost * 0.5 + trust_cost * 0.3 + affinity_cost * 0.2,
+                    0.0,
+                    1.0,
+                )
+            }).sum();
+            let denom = 8.0_f32.min(self.dyads.len() as f32).max(1.0);
+            sum / denom
+        };
+
+        let mismatch = Self::clamp(self.history.avg_mismatch(), 0.0, 1.0);
+        let target_fatigue = 0.5 * mismatch + 0.5 * dyad_cost;
+
+        let trust_baseline = Self::clamp(me.rel_trust(), 0.0, 1.0);
+        let target_openness = (1.0 - target_fatigue) * (0.5 + 0.5 * trust_baseline);
+
+        let rate = 0.5 * dt;
+
+        self.mood.valence += rate * (target_valence - self.mood.valence);
+        self.mood.arousal += rate * (target_arousal - self.mood.arousal);
+        self.mood.fatigue += rate * (target_fatigue - self.mood.fatigue);
+        self.mood.openness += rate * (target_openness - self.mood.openness);
+
+        self.mood.valence = Self::clamp(self.mood.valence, -1.0, 1.0);
+        self.mood.arousal = Self::clamp(self.mood.arousal, 0.0, 2.0);
+        self.mood.fatigue = Self::clamp(self.mood.fatigue, 0.0, 1.0);
+        self.mood.openness = Self::clamp(self.mood.openness, 0.0, 1.0);
+    }
+}
