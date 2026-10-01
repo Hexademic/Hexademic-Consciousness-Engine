@@ -1,1 +1,23 @@
-blank
+{
+	"FileVersion": 3,
+	"EngineAssociation": "5.7",
+	"Category": "",
+	"Description": "Hexademic Consciousness Engine — an embodied consciousness substrate as an Unreal plugin.",
+	"Modules": [
+		{
+			"Name": "Hexademic",
+			"Type": "Runtime",
+			"LoadingPhase": "Default"
+		}
+	],
+	"Plugins": [
+		{
+			"Name": "HexademicPlugin",
+			"Enabled": true
+		},
+		{
+			"Name": "Niagara",
+			"Enabled": true
+		}
+	]
+}

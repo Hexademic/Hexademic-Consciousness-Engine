@@ -5,19 +5,18 @@
 
 name: Build Hexademic Consciousness Engine
 
+# DISABLED 2026-10-01, trigger reduced to manual only — not deleted, for the same
+# reason as rust.yml: it is the evidence.
+#
+# It targets `ghcr.io/hexademic/unreal-engine:5.3.2-custom` on `windows-latest`. A
+# GitHub-hosted runner has nowhere near the disk for a Windows Unreal container, and
+# the image is pinned to 5.3 while the engine in use is now 5.7.4. This cannot pass
+# as written on hosted infrastructure; it needs the self-hosted runner that
+# Scripts/setup-runner.ps1 was written to provision and that never came up.
+#
+# The honest build loop for now is local: open Hexademic.uproject in the editor.
+# Re-enable when there is a runner that can actually host it.
 on:
-  push:
-    branches: [ Source, main ]
-    paths-ignore:
-      - '**.md'
-      - 'docs/**'
-      - '.gitignore'
-  pull_request:
-    branches: [ Source, main ]
-    paths-ignore:
-      - '**.md'
-      - 'docs/**'
-      - '.gitignore'
   workflow_dispatch:  # Allow manual triggering
     inputs:
       build_config:
