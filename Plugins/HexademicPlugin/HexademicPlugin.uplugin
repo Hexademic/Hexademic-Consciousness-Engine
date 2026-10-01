@@ -1,0 +1,25 @@
+{
+	"FileVersion": 3,
+	"Version": 1,
+	"VersionName": "0.1.0",
+	"FriendlyName": "Hexademic Consciousness Plugin",
+	"Description": "Embodied consciousness components: somatic body, intersubjective field, phenomenal collective, and the consciousness world subsystem.",
+	"Category": "Consciousness",
+	"CreatedBy": "Blake \"zelhart\" Hexademic",
+	"CanContainContent": true,
+	"IsBetaVersion": true,
+	"Installed": false,
+	"Modules": [
+		{
+			"Name": "HexademicPlugin",
+			"Type": "Runtime",
+			"LoadingPhase": "Default"
+		}
+	],
+	"Plugins": [
+		{
+			"Name": "Niagara",
+			"Enabled": true
+		}
+	]
+}
