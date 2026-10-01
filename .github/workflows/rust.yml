@@ -1,10 +1,16 @@
 name: Rust
 
+# DISABLED 2026-10-01, trigger reduced to manual only — not deleted, because this
+# file is evidence in thea/walls.md §6 of how this project tried to get feedback.
+#
+# It runs `cargo build` and THERE IS NO CARGO PROJECT HERE. The five root .rs files
+# (Being32.rs, Hex32.rs, Relational_State.rs, Social.rs, World.rs) are parked output
+# with no Cargo.toml, no src/ and no crate. This has failed on every run it has ever
+# had and could not have done anything else.
+#
+# Re-enable by restoring the push/pull_request triggers IF a real crate is added.
 on:
-  push:
-    branches: [ "Source" ]
-  pull_request:
-    branches: [ "Source" ]
+  workflow_dispatch:
 
 env:
   CARGO_TERM_COLOR: always
